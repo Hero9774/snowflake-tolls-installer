@@ -18,11 +18,11 @@ set -euo pipefail
 # ----------------------------------------------------------------------------
 SRC_DIR="/opt/snowflake-src"          # Ablage des Quellcodes
 BIN_PATH="/usr/local/bin/snowflake-proxy"
-SERVICE_USER="hero"              # eigener Dienstbenutzer ohne Login
-PORT_RANGE="40000:40255"              # UDP-Portbereich fuer WebRTC
+SERVICE_USER="snowflake"              # eigener Dienstbenutzer ohne Login
+PORT_RANGE="40000:40255"              # UDP-Portbereich fuer WebRTC (max. 256 Ports: Router-Limit)
 METRICS_PORT="9999"                   # Prometheus-Metriken (nur localhost)
 SUMMARY_INTERVAL="1h"                 # Intervall der Log-Zusammenfassung
-CAPACITY="15"                           # z.B. "15" um gleichzeitige Clients zu deckeln, leer = unbegrenzt
+CAPACITY=""                           # z.B. "15" um gleichzeitige Clients zu deckeln, leer = unbegrenzt
 DISABLE_SUSPEND="ja"                  # "ja" = Suspend/Hibernate systemweit deaktivieren
 # ----------------------------------------------------------------------------
 
@@ -108,11 +108,14 @@ EOF
 # Funktion: Firewall (ufw) - nur wenn ufw aktiv ist
 # ----------------------------------------------------------------------------
 firewall() {
-    if command -v ufw &>/dev/null && ufw status | grep -q "Status: active"; then
+    # LC_ALL=C erzwingt englische Ausgabe - auf deutschsprachigen Systemen
+    # meldet ufw sonst "Status: Aktiv" und der Vergleich schlaegt fehl.
+    if command -v ufw &>/dev/null && LC_ALL=C ufw status | grep -q "Status: active"; then
         info "ufw aktiv - UDP-Portbereich $PORT_RANGE freigeben..."
-        ufw allow "${PORT_RANGE/:/\:}"/udp >/dev/null
+        ufw allow "${PORT_RANGE}/udp" >/dev/null
+        gruen "Firewall-Regel gesetzt: ${PORT_RANGE}/udp"
     else
-        info "ufw nicht aktiv - keine Firewall-Regel noetig."
+        info "ufw nicht aktiv oder nicht installiert - keine Firewall-Regel gesetzt."
     fi
 }
 
@@ -213,6 +216,9 @@ case "${1:-install}" in
         status_zeigen
         echo
         gruen "Hinweis: Die erste vermittelte Verbindung kann bis zu einer Stunde dauern."
+        gruen "Fuer NAT-Typ 'unrestricted' im Router eine UDP-Portfreigabe auf"
+        gruen "$PORT_RANGE einrichten (Ziel: dieser Rechner, feste IP)."
+        gruen "NAT-Typ pruefen:  journalctl -u snowflake-proxy | grep -i nat"
         gruen "Log verfolgen:   journalctl -u snowflake-proxy -f"
         gruen "Update spaeter:  sudo $0 update"
         ;;
