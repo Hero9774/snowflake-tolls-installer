@@ -1,12 +1,3 @@
-# snowflake-tools-installer
-Bash-Skripte für den Betrieb eines Tor Snowflake Standalone-Proxys unter Debian/Ubuntu: Build aus dem Quellcode, gehärteter systemd-Dienst, wöchentliches Auto-Update per Timer sowie ein Kontroll-Skript für Status, Verbindungsstatistik und Versionsvergleich.
-##########################
-
-## Lizenz
-
-Diese Skripte: BSD-3-Clause — siehe [LICENSE](LICENSE).
-Snowflake selbst: BSD-3-Clause, © The Tor Project.
-
 # snowflake-tools
 
 Zwei Bash-Skripte für den unkomplizierten Betrieb eines
@@ -143,14 +134,27 @@ Nachfrage grob 10–100 GB im Monat. Bei Volumenbegrenzung lässt sich das über
 **Ressourcen.** Snowflake ist nahezu reines I/O; die CPU-Last bleibt im niedrigen
 einstelligen Prozentbereich, der Speicherbedarf unter 100 MB.
 
-**NAT-Typ prüfen.** Bei restriktivem NAT vermittelt der Proxy deutlich weniger:
+**NAT-Typ prüfen.** Snowflake ermittelt seinen NAT-Typ beim Start selbst und
+schreibt ihn ins Log — das ist die verlässlichste Auskunft, weil sie aus
+derselben Codebasis stammt, die auch die Vermittlung übernimmt:
 
 ```bash
-sudo apt install stuntman-client
-stunclient --mode full stun.stunprotocol.org
+journalctl -u snowflake-proxy | grep -i nat
 ```
 
-Erwünscht ist *Independent Mapping*.
+| Ergebnis | Bedeutung |
+| --- | --- |
+| `unrestricted` | Der Proxy kann alle Clients bedienen |
+| `restricted` | Nur Clients hinter unbeschränktem NAT werden zugeteilt |
+| `unknown` | Test noch nicht abgeschlossen oder fehlgeschlagen |
+
+Bei `restricted` hilft eine UDP-Portfreigabe im Router auf den konfigurierten
+Bereich (Standard 40000–50000), gerichtet auf die — am besten fest vergebene —
+IP des Rechners. Der Proxy läuft auch ohne, vermittelt dann aber deutlich
+weniger Verbindungen.
+
+Bleibt es trotz Freigabe bei `restricted`, liegt meist eine Doppel-NAT-Situation
+beim Provider vor; daran lässt sich lokal nichts ändern.
 
 **Wo betreiben.** Ein Snowflake-Proxy sollte nur in Ländern und Netzen laufen, in
 denen das keine Probleme verursacht. In stark zensierenden Staaten kann der
