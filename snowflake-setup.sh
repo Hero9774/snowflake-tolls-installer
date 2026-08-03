@@ -19,7 +19,7 @@ set -euo pipefail
 SRC_DIR="/opt/snowflake-src"          # Ablage des Quellcodes
 BIN_PATH="/usr/local/bin/snowflake-proxy"
 SERVICE_USER="hero"              # eigener Dienstbenutzer ohne Login
-PORT_RANGE="40000:50000"              # UDP-Portbereich fuer WebRTC
+PORT_RANGE="40000:40255"              # UDP-Portbereich fuer WebRTC
 METRICS_PORT="9999"                   # Prometheus-Metriken (nur localhost)
 SUMMARY_INTERVAL="1h"                 # Intervall der Log-Zusammenfassung
 CAPACITY="15"                           # z.B. "15" um gleichzeitige Clients zu deckeln, leer = unbegrenzt
