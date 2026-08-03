@@ -22,7 +22,7 @@ SERVICE_USER="snowflake"              # eigener Dienstbenutzer ohne Login
 PORT_RANGE="40000:40255"              # UDP-Portbereich fuer WebRTC (max. 256 Ports: Router-Limit)
 METRICS_PORT="9999"                   # Prometheus-Metriken (nur localhost)
 SUMMARY_INTERVAL="1h"                 # Intervall der Log-Zusammenfassung
-CAPACITY=""                           # z.B. "15" um gleichzeitige Clients zu deckeln, leer = unbegrenzt
+CAPACITY="15"                           # z.B. "15" um gleichzeitige Clients zu deckeln, leer = unbegrenzt
 DISABLE_SUSPEND="ja"                  # "ja" = Suspend/Hibernate systemweit deaktivieren
 # ----------------------------------------------------------------------------
 
@@ -45,6 +45,16 @@ bauen() {
     info "Abhaengigkeiten installieren (golang, git)..."
     apt-get update -qq
     apt-get install -y -qq golang-go git
+
+    # Snowflake benoetigt ein aktuelles Go - alte Distributionen (z.B.
+    # Ubuntu 22.04 mit Go 1.18) scheitern sonst mit kryptischen Buildfehlern.
+    local GO_MINOR
+    GO_MINOR=$(go version | grep -oE 'go1\.[0-9]+' | cut -d. -f2)
+    if [[ -n "$GO_MINOR" && "$GO_MINOR" -lt 21 ]]; then
+        rot "Go 1.$GO_MINOR ist zu alt (mindestens 1.21 noetig)."
+        rot "Neueres Go installieren, z.B.: sudo snap install go --classic"
+        exit 1
+    fi
 
     if [[ -d "$SRC_DIR/.git" ]]; then
         info "Quellcode aktualisieren..."
@@ -142,8 +152,14 @@ suspend_aus() {
 autoupdate_einrichten() {
     # Dieses Skript an festen Ort kopieren, damit der Timer es findet
     local SCRIPT_ZIEL="/usr/local/sbin/snowflake-setup.sh"
-    info "Skript nach $SCRIPT_ZIEL kopieren..."
-    install -m 0755 "$(readlink -f "$0")" "$SCRIPT_ZIEL"
+    local SELBST
+    SELBST="$(readlink -f "$0")"
+    if [[ "$SELBST" != "$SCRIPT_ZIEL" ]]; then
+        info "Skript nach $SCRIPT_ZIEL kopieren..."
+        install -m 0755 "$SELBST" "$SCRIPT_ZIEL"
+    else
+        info "Skript laeuft bereits aus $SCRIPT_ZIEL - kein Kopieren noetig."
+    fi
 
     info "Update-Service schreiben..."
     cat > /etc/systemd/system/snowflake-update.service <<EOF
@@ -195,6 +211,10 @@ status_zeigen() {
 # ----------------------------------------------------------------------------
 case "${1:-install}" in
     update)
+        if [[ ! -f "$UNIT_FILE" ]]; then
+            rot "Dienst nicht installiert - bitte zuerst ohne Argument ausfuehren: sudo $0"
+            exit 1
+        fi
         bauen
         systemctl restart snowflake-proxy
         gruen "Update abgeschlossen."
@@ -206,7 +226,7 @@ case "${1:-install}" in
     autoupdate)
         autoupdate_einrichten
         ;;
-    install|*)
+    install)
         bauen
         unit_schreiben
         firewall
@@ -221,5 +241,10 @@ case "${1:-install}" in
         gruen "NAT-Typ pruefen:  journalctl -u snowflake-proxy | grep -i nat"
         gruen "Log verfolgen:   journalctl -u snowflake-proxy -f"
         gruen "Update spaeter:  sudo $0 update"
+        ;;
+    *)
+        rot "Unbekanntes Argument: $1"
+        echo "Verwendung: sudo $0 [install|update|status|autoupdate]"
+        exit 1
         ;;
 esac
